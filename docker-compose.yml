@@ -1,0 +1,84 @@
+version: "3.9"
+
+services:
+  api:
+    build: .
+    container_name: flowengine_api
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+    ports:
+      - "8000:8000"
+    env_file: .env
+    volumes:
+      - .:/app
+    depends_on:
+      - redis
+      - postgres
+    networks:
+      - flownet
+
+  worker:
+    build: .
+    container_name: flowengine_worker
+    command: celery -A app.workers.celery_app worker --loglevel=info --concurrency=4
+    env_file: .env
+    volumes:
+      - .:/app
+    depends_on:
+      - redis
+      - postgres
+    networks:
+      - flownet
+
+  beat:
+    build: .
+    container_name: flowengine_beat
+    command: celery -A app.workers.celery_app beat --loglevel=info
+    env_file: .env
+    volumes:
+      - .:/app
+    depends_on:
+      - redis
+      - postgres
+    networks:
+      - flownet
+
+  redis:
+    image: redis:7-alpine
+    container_name: flowengine_redis
+    ports:
+      - "6379:6379"
+    networks:
+      - flownet
+
+  postgres:
+    image: postgres:15-alpine
+    container_name: flowengine_postgres
+    environment:
+      POSTGRES_USER: flowuser
+      POSTGRES_PASSWORD: flowpass
+      POSTGRES_DB: flowengine
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    networks:
+      - flownet
+
+  flower:
+    build: .
+    container_name: flowengine_flower
+    command: celery -A app.workers.celery_app flower --port=5555
+    ports:
+      - "5555:5555"
+    env_file: .env
+    depends_on:
+      - redis
+    networks:
+      - flownet
+
+networks:
+  flownet:
+    driver: bridge
+
+volumes:
+  pgdata:
